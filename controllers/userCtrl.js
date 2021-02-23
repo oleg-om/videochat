@@ -1,6 +1,7 @@
 const Users = require("../models/userModel");
 const bcrypt = require("bcrypt");
-const jst = require("jsonwebtoken");
+const jwt = require("jsonwebtoken");
+const sendMail = require("./sendMail");
 
 const { CLIENT_URL } = process.env;
 
@@ -13,6 +14,7 @@ const userCtrl = {
 
       if (!validateEmail(email))
         return res.status(400).json({ msg: "Invalid email" });
+
       const user = await Users.findOne({ email });
       if (user)
         return res.status(400).json({ msg: "This email already exists" });
@@ -33,11 +35,37 @@ const userCtrl = {
       const activation_token = createActivationToken(newUser);
 
       const url = `${CLIENT_URL}/user/activate/${activation_token}`;
-      //   sendMail(email, url);
+      sendMail(email, url);
 
       res.json({
         msg: "Register success! Please activate your email to start.",
       });
+    } catch (err) {
+      return res.status(500).json({ msg: err.message });
+    }
+  },
+  activateEmail: async (req, res) => {
+    try {
+      const { activation_token } = req.body;
+      const user = jwt.verify(
+        activation_token,
+        process.env.ACTIVATION_TOKEN_SECRET
+      );
+
+      console.log(user);
+      const { name, email, password } = user;
+      const check = await Users.findOne({ email });
+      if (check)
+        return res.status(400).json({ msg: "This email already exists." });
+
+      const newUser = new Users({
+        name,
+        email,
+        password,
+      });
+      await newUser.save();
+
+      res.json({ msg: "Account has been activated" });
     } catch (err) {
       return res.status(500).json({ msg: err.message });
     }
@@ -50,19 +78,19 @@ function validateEmail(email) {
 }
 
 const createActivationToken = (payload) => {
-  return JsonWebTokenError.sign(payload, process.env.ACTIVATION_TOKEN_SECRET, {
+  return jwt.sign(payload, process.env.ACTIVATION_TOKEN_SECRET, {
     expiresIn: "5m",
   });
 };
 
 const createAccessToken = (payload) => {
-  return JsonWebTokenError.sign(payload, process.env.ACCESS_TOKEN_SECRET, {
+  return jwt.sign(payload, process.env.ACCESS_TOKEN_SECRET, {
     expiresIn: "15m",
   });
 };
 
 const createRefreshToken = (payload) => {
-  return JsonWebTokenError.sign(payload, process.env.REFRESH_TOKEN_SECRET, {
+  return jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET, {
     expiresIn: "7d",
   });
 };
